@@ -1,6 +1,15 @@
 # X-Aegis 🛡️📉
 
-![X-Aegis Banner](https://placehold.co/1200x400/000000/ffffff/png?text=X-Aegis+Volatility+Shield)
+```text
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║                         X - A E G I S                              ║
+║                                                                    ║
+║               AI-Powered Volatility Shield Protocol                ║
+║           Preserving Wealth in Emerging Economies on Stellar       ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
+```
 
 > **A Stablecoin Volatility Shield for Weak Currencies.**
 

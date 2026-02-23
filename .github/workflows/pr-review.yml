@@ -33,33 +33,33 @@ jobs:
       - name: ❌ Handle Review Failure
         if: steps.build_review.outcome == 'failure'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "### ❌ Institutional Review Failed
+          gh pr comment ${{ github.event.pull_request.number }} --body "### ❌ Institutional Review Required
           
-          The Protocol Liaison has detected build or logic errors in this submission.
+          Inconsistencies were found in this submission.
           
           **Required Action:**
-          1. Review the workflow logs to identify the failing tests or compilation errors.
-          2. Ensure the code aligns with our 'Must Do' standards (Traceability, Safety, Builds).
+          1. **Review logs**: Review the logs to identify the failing tests or compilation errors.
+          2. **Audit Alignment**: Ensure the code aligns with our 'Must Do' standards (Traceability, Safety, Builds).
           3. **Stay in Sync**: Ensure your local environment is synchronized with the upstream project. Run:
              \`\`\`bash
              git fetch origin
              git pull origin main
              \`\`\`
           4. Sync your fork on GitHub and pull the latest changes to your local branch.
-          5. Push a fix to this branch to re-trigger the review.
+          5. **Update PR**: Push your fix to update the PR, or you can delete the PR and make a new one. Either way works for the project.
           
-          *This PR cannot be merged until the review passes.*"
+          *This PR cannot be merged until the review is successful.*"
           exit 1
 
       - name: ✅ Handle Review Success
         if: steps.build_review.outcome == 'success'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "### ✅ Institutional Review Passed
+          gh pr comment ${{ github.event.pull_request.number }} --body "### ✅ Review Successful
           
-          The Protocol Liaison has verified the logic and build integrity of this submission.
+          The logic and build integrity of this submission have been verified. 
           
           **Status:** Perfect Alignment.
-          **Action:** Automatically merging into \`main\`...
+          **Action:** Merging into \`main\`...
           
           *Project maintained by @bbkenny.*"
           

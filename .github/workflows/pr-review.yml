@@ -40,7 +40,13 @@ jobs:
           **Required Action:**
           1. Review the workflow logs to identify the failing tests or compilation errors.
           2. Ensure the code aligns with our 'Must Do' standards (Traceability, Safety, Builds).
-          3. Push a fix to this branch to re-trigger the review.
+          3. **Stay in Sync**: Ensure your local environment is synchronized with the upstream project. Run:
+             \`\`\`bash
+             git fetch origin
+             git pull origin main
+             \`\`\`
+          4. Sync your fork on GitHub and pull the latest changes to your local branch.
+          5. Push a fix to this branch to re-trigger the review.
           
           *This PR cannot be merged until the review passes.*"
           exit 1

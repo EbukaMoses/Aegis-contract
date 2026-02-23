@@ -257,11 +257,11 @@ impl VolatilityShield {
     }
 
     // ── Internal Helpers ──────────────────────
-    pub fn take_fees(env: &Env, amount: i128) -> i128 {
+    pub fn take_fees(env: &Env, amount: i128) -> (i128, i128) {
         let fee_pct = Self::fee_percentage(&env);
-        if fee_pct == 0 { return amount; }
+        if fee_pct == 0 { return (amount, 0); }
         let fee = amount.checked_mul(fee_pct as i128).unwrap().checked_div(10000).unwrap();
-        amount - fee
+        (amount - fee, fee)
     }
 
     pub fn convert_to_shares(env: Env, amount: i128) -> i128 {

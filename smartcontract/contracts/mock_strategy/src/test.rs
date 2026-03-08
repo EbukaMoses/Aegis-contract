@@ -56,7 +56,7 @@ fn test_mock_strategy_deposit_and_withdraw() {
 
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let (token_id, stellar_asset_client, token_client) = create_token_contract(&env, &token_admin);
+    let (token_id, stellar_asset_client, _token_client) = create_token_contract(&env, &token_admin);
 
     client.init(&admin, &token_id);
 

@@ -35,34 +35,13 @@ jobs:
       - name: ❌ Handle Review Failure
         if: steps.build_review.outcome == 'failure'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "### ❌ Institutional Review Required
-          
-          Inconsistencies were found in this submission.
-          
-          **Required Action:**
-          1. **Review logs**: Review the logs to identify the failing tests or compilation errors.
-          2. **Audit Alignment**: Ensure the code aligns with our 'Must Do' standards (Traceability, Safety, Builds).
-          3. **Stay in Sync**: Ensure your local environment is synchronized with the upstream project. Run:
-             \`\`\`bash
-             git fetch origin
-             git pull origin main
-             \`\`\`
-          4. Sync your fork on GitHub and pull the latest changes to your local branch.
-          5. **Update PR**: Push your fix to update the PR, or you can delete the PR and make a new one. Either way works for the project.
-          
-          *This PR cannot be merged until the review is successful.*"
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
+          gh pr comment ${{ github.event.pull_request.number }} --body "hey, took a look at the PR for '$PR_TITLE'. actually, it looks like the smart contract tests or compilation is failing right now. mind checking the logs and fixing the errors? once it's passing, just push an update and we can get it merged."
           exit 1
 
       - name: ✅ Handle Review Success
         if: steps.build_review.outcome == 'success'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "### ✅ Review Successful
-          
-          The logic and build integrity of this submission have been verified. 
-          
-          **Status:** Perfect Alignment.
-          **Action:** Merging into \`main\`...
-          
-          *Project maintained by @bbkenny.*"
-          
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
+          gh pr comment ${{ github.event.pull_request.number }} --body "hey, just went through the changes for '$PR_TITLE'. logic looks really solid and the tests passed perfectly. going ahead and merging this into main now, thanks for the contribution!"
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto

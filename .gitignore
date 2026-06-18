@@ -4,3 +4,4 @@ smartcontract/target/
 .soroban/
 test_snapshots/
 proptest-regressions/
+test_snapshots/

@@ -127,7 +127,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 149351578002
+                            "lo": 283657517554
                           }
                         }
                       },
@@ -142,7 +142,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 98666687271
+                            "lo": 859854304625
                           }
                         }
                       },
@@ -156,6 +156,18 @@
                         },
                         "val": {
                           "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Version"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1
                         }
                       }
                     ]

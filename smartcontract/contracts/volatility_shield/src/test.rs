@@ -1360,3 +1360,122 @@ fn test_multiple_mock_strategies() {
     assert_eq!(mock_strategy1_client.balance(), 300);
     assert_eq!(mock_strategy2_client.balance(), 700);
 }
+
+// ── Upgrade & Migration tests ─────────────────────────────────────────────────
+
+fn setup_v1_contract(env: &Env) -> (Address, VolatilityShieldClient, Address) {
+    let contract_id = env.register_contract(None, VolatilityShield);
+    let client = VolatilityShieldClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    let asset = Address::generate(env);
+    let oracle = Address::generate(env);
+    let treasury = Address::generate(env);
+    client.init(&admin, &asset, &oracle, &treasury, &0u32);
+    (contract_id, client, admin)
+}
+
+#[test]
+fn test_version_set_to_1_on_init() {
+    let env = Env::default();
+    let (_id, client, _admin) = setup_v1_contract(&env);
+    assert_eq!(client.get_version(), 1);
+}
+
+#[test]
+fn test_migrate_v1_to_v2_sets_max_strategies_default() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_id, client, _admin) = setup_v1_contract(&env);
+
+    // Simulate upgrade: version is 1, now run the v1→v2 migration.
+    client.migrate(&2u32);
+
+    // Schema version bumped.
+    assert_eq!(client.get_version(), 2);
+
+    // MaxStrategies defaults to 0 (uncapped) for existing deployments.
+    assert_eq!(client.get_max_strategies(), 0);
+}
+
+#[test]
+fn test_migrate_invalid_version_is_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_id, client, _admin) = setup_v1_contract(&env);
+
+    // Trying to skip directly to v3 must fail.
+    let result = client.try_migrate(&3u32);
+    assert!(result.is_err());
+
+    // Trying to re-apply v1 must also fail.
+    let result2 = client.try_migrate(&1u32);
+    assert!(result2.is_err());
+
+    // Version must remain at 1.
+    assert_eq!(client.get_version(), 1);
+}
+
+#[test]
+fn test_migrate_sequential_steps() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_id, client, _admin) = setup_v1_contract(&env);
+
+    // Step 1: v1 → v2
+    client.migrate(&2u32);
+    assert_eq!(client.get_version(), 2);
+}
+
+#[test]
+fn test_set_max_strategies_requires_v2() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_id, client, _admin) = setup_v1_contract(&env);
+
+    // Should fail on v1.
+    let result = client.try_set_max_strategies(&5u32);
+    assert!(result.is_err());
+
+    // Migrate to v2.
+    client.migrate(&2u32);
+
+    // Now it should succeed.
+    client.set_max_strategies(&5u32);
+    assert_eq!(client.get_max_strategies(), 5);
+}
+
+#[test]
+fn test_v2_preserves_existing_state_after_migration() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+
+    let contract_id = env.register_contract(None, VolatilityShield);
+    let client = VolatilityShieldClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let oracle = Address::generate(&env);
+    let treasury = Address::generate(&env);
+
+    // Create token
+    let token_admin = Address::generate(&env);
+    let (token_id, stellar_asset_client, _) = create_token_contract(&env, &token_admin);
+
+    client.init(&admin, &token_id, &oracle, &treasury, &250u32);
+
+    // Deposit some funds before migration.
+    let user = Address::generate(&env);
+    stellar_asset_client.mint(&user, &1000);
+    client.deposit(&user, &1000);
+
+    let balance_before = client.balance(&user);
+
+    // Migrate to v2.
+    client.migrate(&2u32);
+
+    // All existing state must be untouched.
+    assert_eq!(client.get_admin(), admin);
+    assert_eq!(client.fee_percentage(), 250u32);
+    assert_eq!(client.balance(&user), balance_before);
+    assert_eq!(client.get_version(), 2);
+    assert_eq!(client.get_max_strategies(), 0);
+}

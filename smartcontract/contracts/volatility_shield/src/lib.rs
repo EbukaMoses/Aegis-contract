@@ -1,8 +1,13 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
-    TryFromVal, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env,
+    Map, TryFromVal, Vec,
 };
+
+/// Schema version written to storage at initialisation. Bump this constant
+/// when a breaking storage migration is required and add a corresponding arm
+/// in `migrate`.
+pub const CURRENT_VERSION: u32 = 1;
 
 // ─────────────────────────────────────────────
 // Error types
@@ -22,6 +27,13 @@ pub enum Error {
     TimelockNotElapsed = 9,
     TimelockNotSet = 10,
     SlippageExceeded = 11,
+    /// The on-chain schema version is older than the running code requires.
+    /// Call `migrate` to bring the contract up to the current version before
+    /// using any state-mutating entry points.
+    MigrationRequired = 12,
+    /// `migrate` was called with a version that does not follow sequentially
+    /// from the current stored version.
+    InvalidMigrationVersion = 13,
 }
 
 // ─────────────────────────────────────────────
@@ -52,6 +64,10 @@ pub enum DataKey {
     UserDeposited(Address),
     TimelockDuration,
     TimelockProposal,
+    /// Schema version. Written to 1 by `init` and bumped by `migrate`.
+    Version,
+    /// Maximum number of strategies allowed (introduced in v2). 0 = uncapped.
+    MaxStrategies,
 }
 
 #[contracttype]
@@ -144,6 +160,102 @@ impl VolatilityShield {
             .instance()
             .set(&DataKey::FeePercentage, &fee_percentage);
         env.storage().instance().set(&DataKey::Token, &asset);
+        env.storage()
+            .instance()
+            .set(&DataKey::Version, &CURRENT_VERSION);
+    }
+
+    // ── Upgrade & Migration ───────────────────
+    /// Replace the contract WASM while preserving all storage.
+    /// Only the admin may call this. After the WASM swap the caller must
+    /// invoke `migrate` to advance the schema to the new version.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        let admin = Self::get_admin(&env);
+        admin.require_auth();
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        env.events().publish(
+            (symbol_short!("Upgrade"), symbol_short!("wasm")),
+            env.current_contract_address(),
+        );
+    }
+
+    /// Advance the on-chain schema from its current version to `new_version`.
+    /// Each arm performs the data transformations needed for that step.
+    /// Migrations are strictly sequential: v1→v2, v2→v3, etc.
+    ///
+    /// New fields introduced per version:
+    ///   v2 – `DataKey::MaxStrategies` (u32, 0 = uncapped) initialised to 0
+    ///         for existing deployments that predate the cap.
+    pub fn migrate(env: Env, new_version: u32) -> Result<(), Error> {
+        let admin = Self::get_admin(&env);
+        admin.require_auth();
+
+        let current: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Version)
+            .unwrap_or(1);
+
+        if new_version != current + 1 {
+            return Err(Error::InvalidMigrationVersion);
+        }
+
+        match new_version {
+            2 => {
+                // v1 → v2: introduce MaxStrategies cap with backward-compatible default (0 = uncapped).
+                if !env.storage().instance().has(&DataKey::MaxStrategies) {
+                    env.storage()
+                        .instance()
+                        .set(&DataKey::MaxStrategies, &0u32);
+                }
+            }
+            _ => {
+                return Err(Error::InvalidMigrationVersion);
+            }
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::Version, &new_version);
+
+        env.events().publish(
+            (symbol_short!("Migrate"), symbol_short!("version")),
+            (current, new_version),
+        );
+
+        Ok(())
+    }
+
+    /// Returns the current on-chain schema version.
+    pub fn get_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::Version)
+            .unwrap_or(1)
+    }
+
+    /// Returns the max-strategies cap (0 = uncapped). Available from v2.
+    pub fn get_max_strategies(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MaxStrategies)
+            .unwrap_or(0)
+    }
+
+    /// Admin-only. Set the maximum number of strategies allowed.
+    /// Requires schema v2 or higher.
+    pub fn set_max_strategies(env: Env, max: u32) -> Result<(), Error> {
+        Self::assert_min_version(&env, 2)?;
+        let admin = Self::get_admin(&env);
+        admin.require_auth();
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxStrategies, &max);
+        env.events().publish(
+            (symbol_short!("MaxStrat"), symbol_short!("set")),
+            max,
+        );
+        Ok(())
     }
 
     /// Set up multisig guardians and threshold.
@@ -422,6 +534,7 @@ impl VolatilityShield {
 
     // ── Deposit ───────────────────────────────
     pub fn deposit(env: Env, from: Address, amount: i128) {
+        Self::assert_min_version(&env, CURRENT_VERSION).expect("migration required");
         Self::assert_not_paused(&env);
 
         if amount <= 0 {
@@ -503,6 +616,7 @@ impl VolatilityShield {
 
     // ── Withdraw ──────────────────────────────
     pub fn withdraw(env: Env, from: Address, shares: i128) {
+        Self::assert_min_version(&env, CURRENT_VERSION).expect("migration required");
         Self::assert_not_paused(&env);
 
         if shares <= 0 {
@@ -571,6 +685,7 @@ impl VolatilityShield {
     /// Move funds between strategies according to `allocations`.
     /// Accepts slippage tolerance in basis points (1 bps = 0.01%).
     pub fn rebalance(env: Env, allocations: Map<Address, i128>, max_slippage_bps: u32) {
+        Self::assert_min_version(&env, CURRENT_VERSION).expect("migration required");
         let admin = Self::get_admin(&env);
         let oracle = Self::get_oracle(&env);
 
@@ -997,6 +1112,21 @@ impl VolatilityShield {
         } else {
             oracle.require_auth();
         }
+    }
+
+    /// Panics with `MigrationRequired` if the stored schema version is below
+    /// `min_version`. Call this at the start of any entry point that depends on
+    /// storage fields introduced after v1.
+    fn assert_min_version(env: &Env, min_version: u32) -> Result<(), Error> {
+        let stored: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Version)
+            .unwrap_or(1);
+        if stored < min_version {
+            return Err(Error::MigrationRequired);
+        }
+        Ok(())
     }
 }
 

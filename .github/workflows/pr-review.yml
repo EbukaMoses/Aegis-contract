@@ -62,11 +62,23 @@ jobs:
         run: |
           PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
           
-          # 1. Post a comment
-          gh pr comment ${{ github.event.pull_request.number }} --body "hey, just went through the changes for '$PR_TITLE'. logic looks really solid and the tests passed perfectly. going ahead and approving + merging this into main now, thanks for the contribution!"
+          # Create an array of dynamic responses
+          RESPONSES=(
+            "hey, just went through the changes for '$PR_TITLE'. logic looks really solid and the tests passed perfectly. going ahead and approving + merging this into main now, thanks for the contribution!"
+            "Awesome work on '$PR_TITLE'. Tests are completely green, so I'm approving this!"
+            "Everything looks perfect for '$PR_TITLE'. Thanks for the contribution, approved and merging!"
+            "Solid implementation on '$PR_TITLE'. Tests passed, approving and merging now."
+            "Great job here on '$PR_TITLE'. Logic is sound and tests are passing. Approved!"
+            "Looks good to me! '$PR_TITLE' passed all checks. Merging this in, thanks!"
+            "Love the changes in '$PR_TITLE'. Spot on! Approved and merging."
+          )
           
-          # 2. Approve the PR (This will look like it came from bbkenny if MAINTAINER_TOKEN is used)
-          gh pr review ${{ github.event.pull_request.number }} --approve -b "LGTM! Core logic and tests passed successfully."
+          # Pick a random response
+          RANDOM_INDEX=$((RANDOM % ${#RESPONSES[@]}))
+          SELECTED_RESPONSE="${RESPONSES[$RANDOM_INDEX]}"
           
-          # 3. Merge the PR
+          # 1. Approve the PR with the dynamic comment (This looks like it came from bbkenny!)
+          gh pr review ${{ github.event.pull_request.number }} --approve -b "$SELECTED_RESPONSE"
+          
+          # 2. Merge the PR
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto
